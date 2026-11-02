@@ -51,10 +51,32 @@ jobs:
 
 
     - name: Replace
+      shell: pwsh
+      env:
+        PCL_BUILD_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        PCL_BUILD_CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        PCL_BUILD_COMMIT: ${{ github.sha }}
       run: |
-        (gc "Plain Craft Launcher 2\Modules\ModSecret.vb") -replace 'Public OAuthClientId As String = If(Environment.GetEnvironmentVariable("PCL_MS_CLIENT_ID"), "")', 'Public OAuthClientId As String = If(Environment.GetEnvironmentVariable("PCL_MS_CLIENT_ID"), "${{ secrets.CLIENT_ID }}")' | Out-File "Plain Craft Launcher 2\Modules\ModSecret.vb"
-        (gc "Plain Craft Launcher 2\Modules\ModSecret.vb") -replace 'Public CurseForgeAPIKey As String = If(Environment.GetEnvironmentVariable("PCL_CURSEFORGE_API_KEY"), "")', 'Public CurseForgeAPIKey As String = If(Environment.GetEnvironmentVariable("PCL_CURSEFORGE_API_KEY"), "${{ secrets.CURSEFORGE_API_KEY }}")' | Out-File "Plain Craft Launcher 2\Modules\ModSecret.vb"
-        (gc "Plain Craft Launcher 2\Modules\Base\ModBase.vb") -replace 'Public Const CommitHash As String = ""', 'Public Const CommitHash As String = "${{ github.sha }}"' | Out-File "Plain Craft Launcher 2\Modules\Base\ModBase.vb"
+        $secretPath = "Plain Craft Launcher 2\Modules\ModSecret.vb"
+        $source = Get-Content -LiteralPath $secretPath -Raw
+        $settings = @(
+          @{ Name = 'CLIENT_ID'; Variable = 'PCL_MS_CLIENT_ID'; Value = $env:PCL_BUILD_CLIENT_ID },
+          @{ Name = 'CURSEFORGE_API_KEY'; Variable = 'PCL_CURSEFORGE_API_KEY'; Value = $env:PCL_BUILD_CURSEFORGE_API_KEY }
+        )
+        foreach ($setting in $settings) {
+          if ([string]::IsNullOrWhiteSpace($setting.Value)) { throw "Missing repository secret: $($setting.Name)" }
+          if ($setting.Value -match '[\r\n]') { throw "Repository secret contains a newline: $($setting.Name)" }
+          $original = 'If(Environment.GetEnvironmentVariable("' + $setting.Variable + '"), "")'
+          if (-not $source.Contains($original)) { throw "Source placeholder not found for $($setting.Name)" }
+          $escapedValue = $setting.Value.Replace('"', '""')
+          $replacement = 'If(Environment.GetEnvironmentVariable("' + $setting.Variable + '"), "' + $escapedValue + '")'
+          $source = $source.Replace($original, $replacement)
+        }
+        Set-Content -LiteralPath $secretPath -Value $source -Encoding utf8 -NoNewline
+        $basePath = "Plain Craft Launcher 2\Modules\Base\ModBase.vb"
+        $baseSource = Get-Content -LiteralPath $basePath -Raw
+        $baseSource = $baseSource.Replace('Public Const CommitHash As String = ""', 'Public Const CommitHash As String = "' + $env:PCL_BUILD_COMMIT + '"')
+        Set-Content -LiteralPath $basePath -Value $baseSource -Encoding utf8 -NoNewline
         
     - name: Restore NuGet Packages
       run: dotnet restore PCLCS\PCLCS.csproj
