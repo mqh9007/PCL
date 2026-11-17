@@ -3,10 +3,12 @@ on:
   push:
     paths:
       - 'Plain Craft Launcher 2/**'
+      - 'PCLCS/**'
       - '.github/workflows/**'
   pull_request:
     paths:
       - 'Plain Craft Launcher 2/**'
+      - 'PCLCS/**'
       - '.github/workflows/**'
   workflow_dispatch:
 
@@ -56,6 +58,7 @@ jobs:
         PCL_BUILD_CLIENT_ID: ${{ secrets.CLIENT_ID }}
         PCL_BUILD_CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         PCL_BUILD_COMMIT: ${{ github.sha }}
+        PCL_BUILD_SERVER_LIST: ${{ vars.PCL_SERVER_LIST }}
       run: |
         $secretPath = "Plain Craft Launcher 2\Modules\ModSecret.vb"
         $source = Get-Content -LiteralPath $secretPath -Raw
@@ -76,6 +79,16 @@ jobs:
         $basePath = "Plain Craft Launcher 2\Modules\Base\ModBase.vb"
         $baseSource = Get-Content -LiteralPath $basePath -Raw
         $baseSource = $baseSource.Replace('Public Const CommitHash As String = ""', 'Public Const CommitHash As String = "' + $env:PCL_BUILD_COMMIT + '"')
+        $serverList = $env:PCL_BUILD_SERVER_LIST
+        if ($null -eq $serverList) { $serverList = '' }
+        if ($serverList -match '[\r\n]') { throw 'Repository variable PCL_SERVER_LIST must be a single line' }
+        if ($serverList.Length -gt 10000) { throw 'Repository variable PCL_SERVER_LIST exceeds 10000 characters' }
+        Add-Type -Path "PCLCS\Minecraft\McServerList.cs"
+        $validationError = [PCLCS.McServerList]::ValidateConfiguration($serverList)
+        if ($validationError) { throw "Invalid repository variable PCL_SERVER_LIST: $validationError" }
+        $placeholder = 'Public Const LaunchServerListPreset As String = ""'
+        if (-not $baseSource.Contains($placeholder)) { throw 'Source placeholder not found for PCL_SERVER_LIST' }
+        $baseSource = $baseSource.Replace($placeholder, 'Public Const LaunchServerListPreset As String = "' + $serverList.Replace('"', '""') + '"')
         Set-Content -LiteralPath $basePath -Value $baseSource -Encoding utf8 -NoNewline
         
     - name: Restore NuGet Packages
