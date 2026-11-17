@@ -80,6 +80,13 @@ Public Class ValidateFunc
     End Function
 End Class
 
+Public Class ValidateServerList
+    Inherits Validate
+    Public Overrides Function Validate(Str As String) As String
+        Return McServerList.ValidateConfiguration(Str)
+    End Function
+End Class
+
 ''' <summary>
 ''' 必须满足正则表达式。
 ''' </summary>

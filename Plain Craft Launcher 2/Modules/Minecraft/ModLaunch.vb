@@ -1742,6 +1742,15 @@ NextInstance:
 
     Private Sub McLaunchPrerun()
 
+        If Settings.Get(Of Boolean)("LaunchServerListEnabled") Then
+            Try
+                Dim AddedCount = McServerList.Inject(McInstanceSelected.PathIndie, Settings.Get(Of String)("LaunchServerList"))
+                If AddedCount > 0 Then McLaunchLog($"已向多人游戏列表添加 {AddedCount} 个服务器")
+            Catch ex As Exception
+                Logger.Error(ex, "添加多人游戏服务器失败，已保留原有列表并继续启动", LogBehavior.Toast)
+            End Try
+        End If
+
         '使用高性能显卡
         If Settings.Get(Of Boolean)("LaunchAdvanceGraphicCard") Then
             Try
