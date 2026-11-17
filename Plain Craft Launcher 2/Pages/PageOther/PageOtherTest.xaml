@@ -7,38 +7,49 @@
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     PanScroll="PanBack">
     <local:MyScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" x:Name="PanBack">
-        <StackPanel Margin="25,10">
-            <local:MyCard Title="下载文件" Margin="0,15">
-                <StackPanel Margin="25,40,25,20">
-                    <TextBlock Text="使用 PCL 下载任意 HTTP / HTTPS 文件，可在下载管理中查看进度或取消任务。" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnDownload" Text="输入下载地址" Height="35" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
+        <StackPanel x:Name="PanMain" Margin="25,10">
+            <local:MyCard Title="百宝箱" Margin="0,15">
+                <WrapPanel Margin="25,42,25,22">
+                    <local:MyButton x:Name="BtnJrrp" Text="今日人品" Height="35" Width="140" Margin="0,0,15,0" />
+                    <local:MyButton x:Name="BtnMemory" Text="内存优化" Height="35" Width="140" Margin="0,0,15,0" />
+                    <local:MyButton x:Name="BtnRubbish" Text="清理游戏垃圾" Height="35" Width="140" Margin="0,0,15,0"
+                                    ToolTip="仅清理过期的 PCL 下载临时文件与任务缓存，不会删除游戏或存档。" />
+                    <local:MyButton x:Name="BtnDontClick" Text="千万别点" Height="35" Width="140" ColorType="Red" />
+                </WrapPanel>
             </local:MyCard>
-            <local:MyCard Title="系统工具" Margin="0,0,0,15">
-                <StackPanel Margin="25,40,25,20">
-                    <TextBlock Text="内存优化会回收程序暂时不用的物理内存，不会关闭程序；程序再次使用这些数据时可能需要重新加载。" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnMemory" Text="内存优化" Height="35" Width="160" HorizontalAlignment="Left" Margin="0,0,0,15" />
-                    <TextBlock Text="垃圾清理仅删除超过一天的 PCL 下载临时文件和任务缓存，不会删除游戏、存档或启动器设置。" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnRubbish" Text="清理垃圾" Height="35" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
+            <local:MyCard x:Name="CardCave" Title="回声洞" Margin="0,0,0,15" Cursor="Hand" Focusable="True" Background="Transparent">
+                <TextBlock Text="反复点击这里可以查看 PCL 作者与各位沙雕网友乱七八糟的留言！" TextWrapping="Wrap" Margin="25,38,25,17" IsHitTestVisible="False" />
             </local:MyCard>
-            <local:MyCard Title="今日人品" Margin="0,0,0,15">
-                <StackPanel Margin="25,40,25,20">
-                    <TextBlock Text="看看今天的幸运指数！同一台电脑在同一天的结果不会改变，仅供娱乐。" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnJrrp" Text="查看今日人品" Height="35" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
-            </local:MyCard>
-            <local:MyCard Title="你知道吗？" Margin="0,0,0,15">
-                <StackPanel Margin="25,40,25,20">
-                    <TextBlock x:Name="LabHint" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnHint" Text="换一条提示" Height="35" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
-            </local:MyCard>
-            <local:MyCard Title="随机趣闻" Margin="0,0,0,15">
-                <StackPanel Margin="25,40,25,20">
-                    <TextBlock x:Name="LabCave" TextWrapping="Wrap" Margin="0,0,0,12" />
-                    <local:MyButton x:Name="BtnCave" Text="换一条趣闻" Height="35" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
+            <local:MyCard Title="下载自定义文件" Margin="0,0,0,15">
+                <Grid Margin="25,38,25,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="77" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="40" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="28" />
+                        <RowDefinition Height="9" />
+                        <RowDefinition Height="28" />
+                        <RowDefinition Height="9" />
+                        <RowDefinition Height="28" />
+                        <RowDefinition Height="15" />
+                        <RowDefinition Height="35" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.ColumnSpan="3" Text="使用 PCL 的高速多线程下载引擎下载任意文件。请注意，部分网站（例如百度网盘）可能会报错 (403) 已禁止，无法正常下载。" TextWrapping="Wrap" Margin="0,0,0,9" />
+                    <TextBlock Grid.Row="1" Text="下载地址" VerticalAlignment="Center" />
+                    <local:MyTextBox x:Name="TextDownloadUrl" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" />
+                    <TextBlock Grid.Row="3" Text="保存到" VerticalAlignment="Center" />
+                    <local:MyTextBox x:Name="TextDownloadFolder" Grid.Row="3" Grid.Column="1" />
+                    <local:MyTextButton x:Name="BtnDownloadSelect" Grid.Row="3" Grid.Column="2" Text="选择" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="0" />
+                    <TextBlock Grid.Row="5" Text="文件名" VerticalAlignment="Center" />
+                    <local:MyTextBox x:Name="TextDownloadName" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" />
+                    <StackPanel Grid.Row="7" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <local:MyButton x:Name="BtnDownload" Text="开始下载" Width="135" IsEnabled="False" Margin="0,0,16,0" />
+                        <local:MyButton x:Name="BtnDownloadOpen" Text="打开文件夹" Width="135" />
+                    </StackPanel>
+                </Grid>
             </local:MyCard>
         </StackPanel>
     </local:MyScrollViewer>

@@ -5,6 +5,8 @@ Imports System.Text.RegularExpressions
 
 Public Class PageOtherTest
 
+    Private HasInitialized As Boolean
+    Private LastGeneratedFileName As String = ""
     Private Shared ReadOnly DownloadTargets As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private Shared MemoryRunning As Integer
     Private Shared RubbishRunning As Integer
@@ -35,16 +37,65 @@ Public Class PageOtherTest
 
     Private Sub Page_Loaded(sender As Object, args As RoutedEventArgs) Handles Me.Loaded
         PanBack.ScrollToHome()
-        LabHint.Text = GetRandomHint()
-        LabCave.Text = GetRandomCave()
+        If HasInitialized Then Return
+        HasInitialized = True
+        TextDownloadUrl.ValidateRules = New System.Collections.ObjectModel.Collection(Of Validate) From {
+            New ValidateNullOrWhiteSpace, New ValidateFunc(AddressOf ValidateDownloadUrl)
+        }
+        TextDownloadFolder.ValidateRules = New System.Collections.ObjectModel.Collection(Of Validate) From {
+            New ValidateFolderPath With {.UseMinecraftCharCheck = False}
+        }
+        TextDownloadName.ValidateRules = New System.Collections.ObjectModel.Collection(Of Validate) From {
+            New ValidateFileName With {.UseMinecraftCharCheck = False}
+        }
+        Dim Folder = Settings.Get(Of String)("CacheDownloadFolder")
+        If String.IsNullOrWhiteSpace(Folder) Then
+            Dim DefaultFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
+            Folder = CStr(RegistryUtils.TryRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders", "{374DE290-123F-4565-9164-39C4925E467B}", DefaultFolder))
+            If String.IsNullOrWhiteSpace(Folder) Then Folder = DefaultFolder
+        End If
+        TextDownloadFolder.Text = PathUtils.AddSlashSuffix(Environment.ExpandEnvironmentVariables(Folder))
+        TextDownloadUrl.ForceShowAsSuccess()
+        TextDownloadName.ForceShowAsSuccess()
+        DownloadInputs_Changed()
     End Sub
 
     Private Sub BtnDownload_Click() Handles BtnDownload.Click
-        Dim Url = MyMsgBoxInput("下载文件", "请输入 HTTP / HTTPS 下载地址。", ValidateRules:=New System.Collections.ObjectModel.Collection(Of Validate) From {
-            New ValidateNullOrWhiteSpace, New ValidateFunc(AddressOf ValidateDownloadUrl)
-        }, HintText:="https://")
-        If Url Is Nothing Then Return
-        StartCustomDownload(Url, Nothing)
+        DownloadInputs_Changed()
+        If Not BtnDownload.IsEnabled Then Return
+        Settings.Set("CacheDownloadFolder", TextDownloadFolder.Text.Trim())
+        StartCustomDownload(TextDownloadUrl.Text, TextDownloadName.Text, TextDownloadFolder.Text.Trim())
+    End Sub
+
+    Private Sub DownloadUrl_Changed() Handles TextDownloadUrl.TextChanged
+        If TextDownloadName Is Nothing Then Return
+        If TextDownloadName.Text <> "" AndAlso TextDownloadName.Text <> LastGeneratedFileName Then Return
+        LastGeneratedFileName = If(ValidateDownloadUrl(TextDownloadUrl.Text) = "", GetDownloadFileName(TextDownloadUrl.Text, Nothing), "")
+        TextDownloadName.Text = LastGeneratedFileName
+    End Sub
+
+    Private Sub DownloadInputs_Changed() Handles TextDownloadUrl.TextChanged, TextDownloadFolder.TextChanged, TextDownloadName.TextChanged
+        If BtnDownload Is Nothing OrElse BtnDownloadOpen Is Nothing OrElse TextDownloadUrl Is Nothing OrElse TextDownloadFolder Is Nothing OrElse TextDownloadName Is Nothing Then Return
+        BtnDownload.IsEnabled = ValidateDownloadUrl(TextDownloadUrl.Text) = "" AndAlso TextDownloadFolder.IsValidated AndAlso TextDownloadName.IsValidated
+        BtnDownloadOpen.IsEnabled = TextDownloadFolder.IsValidated AndAlso Not String.IsNullOrWhiteSpace(TextDownloadFolder.Text)
+    End Sub
+
+    Private Sub BtnDownloadSelect_Click() Handles BtnDownloadSelect.Click
+        Dim Folder = Dialogs.SelectFolder("选择下载文件的保存位置", False, TextDownloadFolder.Text).FirstOrDefault()
+        If Folder Is Nothing Then Return
+        TextDownloadFolder.Text = PathUtils.AddSlashSuffix(Folder)
+        Settings.Set("CacheDownloadFolder", TextDownloadFolder.Text)
+    End Sub
+
+    Private Sub BtnDownloadOpen_Click() Handles BtnDownloadOpen.Click
+        If Not BtnDownloadOpen.IsEnabled Then Return
+        Try
+            Dim Folder = Path.GetFullPath(TextDownloadFolder.Text.Trim())
+            Directory.CreateDirectory(Folder)
+            OpenExplorer(PathUtils.AddSlashSuffix(Folder))
+        Catch ex As Exception
+            Logger.Warn(ex, "打开下载文件夹失败", LogBehavior.Toast)
+        End Try
     End Sub
 
     Private Sub BtnMemory_Click() Handles BtnMemory.Click
@@ -59,12 +110,19 @@ Public Class PageOtherTest
         Jrrp()
     End Sub
 
-    Private Sub BtnHint_Click() Handles BtnHint.Click
-        LabHint.Text = GetRandomHint()
+    Private Sub BtnDontClick_Click() Handles BtnDontClick.Click
+        MyMsgBox("不是说了千万别点嘛……" & vbCrLf & vbCrLf & GetRandomHint(), "你还是点了！")
     End Sub
 
-    Private Sub BtnCave_Click() Handles BtnCave.Click
-        LabCave.Text = GetRandomCave()
+    Private Sub CardCave_Click(sender As Object, args As MouseButtonEventArgs) Handles CardCave.MouseLeftButtonUp
+        MyMsgBox(GetRandomCave(), "回声洞")
+        args.Handled = True
+    End Sub
+
+    Private Sub CardCave_KeyDown(sender As Object, args As KeyEventArgs) Handles CardCave.KeyDown
+        If args.Key <> Key.Enter AndAlso args.Key <> Key.Space Then Return
+        MyMsgBox(GetRandomCave(), "回声洞")
+        args.Handled = True
     End Sub
 
     Private Shared Function ValidateDownloadUrl(Url As String) As String
@@ -74,6 +132,18 @@ Public Class PageOtherTest
             Return "请输入有效的 HTTP / HTTPS 下载地址！"
         End If
         Return ""
+    End Function
+
+    Private Shared Function GetDownloadFileName(Url As String, FileName As String) As String
+        If String.IsNullOrWhiteSpace(FileName) OrElse FileName = "未知" OrElse FileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 Then
+            FileName = Uri.UnescapeDataString(Path.GetFileName(New Uri(Url.Trim()).AbsolutePath))
+        End If
+        For Each InvalidCharacter In Path.GetInvalidFileNameChars()
+            FileName = FileName.Replace(InvalidCharacter, "_"c)
+        Next
+        FileName = FileName.Trim().TrimEnd("."c)
+        If FileName = "" OrElse Regex.IsMatch(FileName, "^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)", RegexOptions.IgnoreCase) Then Return "下载文件"
+        Return FileName
     End Function
 
     Public Shared Sub StartCustomDownload(Url As String, FileName As String, Optional Folder As String = Nothing)
@@ -86,15 +156,7 @@ Public Class PageOtherTest
                 Return
             End If
             Url = Url.Trim()
-            Dim Address As New Uri(Url)
-            If String.IsNullOrWhiteSpace(FileName) OrElse FileName = "未知" OrElse FileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 Then
-                FileName = Uri.UnescapeDataString(Path.GetFileName(Address.AbsolutePath))
-            End If
-            For Each InvalidCharacter In Path.GetInvalidFileNameChars()
-                FileName = FileName.Replace(InvalidCharacter, "_"c)
-            Next
-            FileName = FileName.Trim().TrimEnd("."c)
-            If FileName = "" OrElse Regex.IsMatch(FileName, "^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)", RegexOptions.IgnoreCase) Then FileName = "下载文件"
+            FileName = GetDownloadFileName(Url, FileName)
             RunInUiWait(
             Sub()
                 If String.IsNullOrWhiteSpace(Folder) Then
