@@ -115,6 +115,10 @@ Public Class ResourceProject
         End Get
     End Property
 
+    Friend Function GetRelatedSlug(Platform As ResourcePlatforms) As String
+        Return WikiEntry?.Slugs.GetOrDefault(Platform)
+    End Function
+
     '实例化
 
     ''' <summary>

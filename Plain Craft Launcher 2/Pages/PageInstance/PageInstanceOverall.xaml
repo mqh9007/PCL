@@ -81,9 +81,6 @@
                         <local:MyButton x:Name="BtnManageCheck" Text="补全文件" MinWidth="140" Padding="13,0" Margin="0,0,20,0" Grid.Column="1" ToolTip="校验版本依赖文件是否完整，并重新下载 Assets 索引与缺失、校验失败的文件。&#xa;若游戏缺失音效，请尝试此项。" />
                         <local:MyButton x:Name="BtnManageDelete" Text="删除版本" MinWidth="140" Padding="13,0" Margin="0,0,20,0" Grid.Column="2" ColorType="Red" />
                     </Grid>
-                    <local:MyButton x:Name="BtnManageLinkMods" Text="补全联机模组" MinWidth="140" Padding="13,0" Height="35"
-                                    Margin="0,2,0,7" HorizontalAlignment="Left"
-                                    ToolTip="检查「设置 → 其他 → 联机模组」中的列表，并选择要为当前版本补全的模组。" />
                 </StackPanel>
             </local:MyCard>
         </StackPanel>

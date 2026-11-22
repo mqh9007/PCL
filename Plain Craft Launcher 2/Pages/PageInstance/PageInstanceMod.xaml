@@ -10,19 +10,14 @@
                 <StackPanel x:Name="PanMain" Margin="25,10,25,10" Grid.IsSharedSizeScope="True"> <!-- 若显示多选模块则为 92 -->
                     <local:MySearchBox Margin="0,15" HintText="搜索 Mod 名称 / 描述 / 标签" x:Name="SearchBox" />
                     <local:MyCard Grid.Row="0" Margin="0,0,0,15" x:Name="PanManage">
-                        <Grid Margin="15,15,0,15" Height="35">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="Button" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="Button" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="Button" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="Button" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="Button" />
-                            </Grid.ColumnDefinitions>
-                            <local:MyButton x:Name="BtnManageOpen" Grid.Column="0" MinWidth="110" Text="打开文件夹" Padding="13,0" Margin="0,0,15,0" HorizontalAlignment="Left" ColorType="Highlight" />
-                            <local:MyButton x:Name="BtnManageInstall" Grid.Column="1" MinWidth="110" Text="从文件安装" Padding="13,0" Margin="0,0,15,0" HorizontalAlignment="Left" />
-                            <local:MyButton x:Name="BtnManageDownload" Grid.Column="2" MinWidth="110" Text="下载新 Mod" Padding="13,0" Margin="0,0,15,0" HorizontalAlignment="Left" />
-                            <local:MyButton x:Name="BtnManageSelectAll" Grid.Column="3" MinWidth="110" Text="全选" Padding="13,0" Margin="0,0,15,0" HorizontalAlignment="Left" />
-                        </Grid>
+                        <WrapPanel Margin="15,15,0,7">
+                            <local:MyButton x:Name="BtnManageOpen" Height="35" MinWidth="110" Text="打开文件夹" Padding="13,0" Margin="0,0,15,8" ColorType="Highlight" />
+                            <local:MyButton x:Name="BtnManageInstall" Height="35" MinWidth="110" Text="从文件安装" Padding="13,0" Margin="0,0,15,8" />
+                            <local:MyButton x:Name="BtnManageDownload" Height="35" MinWidth="110" Text="下载新 Mod" Padding="13,0" Margin="0,0,15,8" />
+                            <local:MyButton x:Name="BtnManageSelectAll" Height="35" MinWidth="110" Text="全选" Padding="13,0" Margin="0,0,15,8" />
+                            <local:MyButton x:Name="BtnManageLinkMods" Height="35" MinWidth="110" Text="补全联机模组" Padding="13,0" Margin="0,0,15,8"
+                                            ToolTip="检查「设置 → 其他 → 联机模组」中的列表，并选择要为当前版本补全的模组。" />
+                        </WrapPanel>
                     </local:MyCard>
                     <local:MyCard x:Name="PanListBack" VerticalAlignment="Top" Opacity="0" Margin="0,0,0,14" Title=" " MinHeight="55">
                         <StackPanel x:Name="PanFilter" Margin="15,13,0,0" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Left" Height="28">
@@ -50,6 +45,8 @@
                         <local:MyButton Height="35" HorizontalAlignment="Center" Grid.Column="1" x:Name="BtnHintInstall" MinWidth="140" Text="从文件安装 Mod" Margin="0,0,17,0" Padding="13,0" />
                         <local:MyButton Height="35" HorizontalAlignment="Center" Grid.Column="2" x:Name="BtnHintOpen" MinWidth="140" Text="打开 Mod 文件夹" Margin="0,0,17,0" Padding="13,0" />
                     </Grid>
+                    <local:MyButton x:Name="BtnHintLinkMods" Height="35" MinWidth="140" Text="补全联机模组"
+                                    HorizontalAlignment="Center" Padding="13,0" Margin="0,8,0,0" />
                 </StackPanel>
             </local:MyCard>
         </Grid>

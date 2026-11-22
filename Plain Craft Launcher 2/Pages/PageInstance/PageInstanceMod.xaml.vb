@@ -252,6 +252,99 @@ Public Class PageInstanceMod
 
 #Region "管理"
 
+    Private Shared ReadOnly CompletingModFolders As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+    Private Sub BtnManageLinkMods_Click() Handles BtnManageLinkMods.Click, BtnHintLinkMods.Click
+        Dim Instance = PageInstanceLeft.Instance
+        Try
+            Dim Version = Instance.Version
+            If Not Version.ModLoaders.Flags.Any() OrElse Version.VanillaName = "Unknown" Then
+                Hint("当前版本需要可识别的 Minecraft 版本和模组加载器。", HintType.Red)
+                Return
+            End If
+            Dim Folder = Instance.PathIndie & "mods\"
+            Dim FolderKey = PathUtils.ForCompare(Folder)
+            If McInstanceLock.IsLocked(Instance) OrElse CompletingModFolders.Contains(FolderKey) OrElse
+               UpdatingInstanceModFolders.Contains(Folder) Then
+                Hint("该版本的文件正在被修改，请稍后再补全联机模组！", HintType.Red)
+                Return
+            End If
+            Dim Names = LinkModCompletion.ParseNames(Settings.Get(Of String)("LinkModList"))
+            If Names.Count = 0 Then
+                MyMsgBox("请先在「设置 → 其他 → 联机模组」中填写要补全的模组。", "补全联机模组")
+                Return
+            End If
+
+            Dim Selected = MyMsgBoxMultiSelect(
+                Async Function(Cancellation)
+                    Dim Items = Await Task.Run(Function() LinkModCompletion.Inspect(Names, Folder, Version, Cancellation), Cancellation)
+                    Return Items.Select(Function(Item) ToLinkModListItem(Item)).ToList()
+                End Function, "补全联机模组", "勾选要补全的模组，所需的前置模组会一并安装。", "补全所选").
+                Select(Function(Item) DirectCast(Item.Tag, LinkModCompletion.Entry)).ToList()
+            If Selected.Count = 0 Then Return
+            Dim Unavailable = Selected.Where(Function(Item) Item.Download Is Nothing).ToList()
+            If Unavailable.Count > 0 Then
+                Selected.RemoveAll(Function(Item) Item.Download Is Nothing)
+                Dim Details = String.Join(vbCrLf, Unavailable.Select(Function(Item) $"· {Item.Name}：{Item.Status}"))
+                Dim Message = $"以下模组无法为 Minecraft {Version.VanillaName}（{Version.ModLoaders}）补全。" & vbCrLf & vbCrLf & Details
+                If Selected.Count = 0 Then
+                    MyMsgBox(Message, "无法补全联机模组", IsWarn:=True)
+                    Return
+                End If
+                If MyMsgBox(Message, "部分联机模组无法补全", "补全其余模组", "取消", IsWarn:=True) <> 1 Then Return
+            End If
+            If Not DirectoryUtils.Exists(Instance.PathVersion) OrElse Not PathUtils.IsSame(Instance.PathIndie & "mods\", Folder) Then
+                Hint("版本位置已变更，请重新检查联机模组！", HintType.Red)
+                Return
+            End If
+
+            Dim Worker As New RedoableWorker(
+                Sub(Cancellation, Progress) LinkModCompletion.Install(Selected, Folder, Version, Cancellation.GetValueOrDefault(), Progress))
+            Dim Loader As New LoaderCombo(Of Integer)(Instance.Name & " 联机模组补全",
+                {New LoaderWorker("下载并安装联机模组", Worker)})
+            If CompletingModFolders.Contains(FolderKey) OrElse UpdatingInstanceModFolders.Contains(Folder) OrElse
+               Not McInstanceLock.TryAcquire(Worker, Instance.PathVersion) Then
+                Hint("该版本的文件正在被修改，请稍后再补全联机模组！", HintType.Red)
+                Return
+            End If
+            CompletingModFolders.Add(FolderKey)
+            Loader.OnStateChanged = Sub(Current)
+                                        If Current.State <> LoadState.Failed Then LoaderStateChangedHintOnly(Current)
+                                    End Sub
+            AddHandler Worker.Failed, Sub(ex) RunInUi(Sub() MyMsgBox(ex.GetDisplay(False), "补全联机模组失败", IsWarn:=True))
+            AddHandler Worker.Stopped,
+                Sub()
+                    RunInUi(
+                        Sub()
+                            CompletingModFolders.Remove(FolderKey)
+                            If FrmMain.PageCurrent = FormMain.PageType.InstanceSetup AndAlso
+                               FrmMain.PageCurrentSub = FormMain.PageSubType.InstanceMod AndAlso
+                               PageInstanceLeft.Instance IsNot Nothing AndAlso
+                               PathUtils.IsSame(PageInstanceLeft.Instance.PathIndie & "mods\", Folder) Then
+                                ReloadModList(True)
+                            End If
+                        End Sub)
+                End Sub
+            Loader.Start(1)
+            LoaderTaskbarAdd(Loader)
+            FrmMain.BtnExtraDownload.ShowRefresh()
+            FrmMain.BtnExtraDownload.Ribble()
+        Catch ex As Exception
+            Logger.Error(ex, "补全联机模组失败", LogBehavior.Alert)
+        End Try
+    End Sub
+
+    Private Shared Function ToLinkModListItem(Item As LinkModCompletion.Entry) As MyListItem
+        Dim Project = Item.Project
+        Dim Title = If(Project Is Nothing, Item.Name, Project.GetControlTitle(False).Title)
+        Dim Info = If(Project IsNot Nothing AndAlso Title <> Project.RawName, Project.RawName & " · ", "") & Item.Status
+        Dim Row As New MyListItem With {
+            .Title = Title, .Info = Info, .Height = 48, .Tag = Item, .ToolTip = If(Item.Download?.FileName, Info),
+            .Logo = If(Project?.LogoUrl, PathImage & "Icons/NoIcon.png"), .IsEnabled = Not Item.IsPresent}
+        If TypeOf Row.PathLogo Is MyImage Then Project.ApplyLogoToMyImage(DirectCast(Row.PathLogo, MyImage))
+        Return Row
+    End Function
+
     ''' <summary>
     ''' 打开 Mods 文件夹。
     ''' </summary>
@@ -536,6 +629,11 @@ Install:
     ''' </summary>
     Public Shared UpdatingInstanceModFolders As New List(Of String)
     Public Sub UpdateMods(ModList As IEnumerable(Of LocalResourceFile))
+        Dim PathMods As String = PageInstanceLeft.Instance.PathIndie & "mods\"
+        If CompletingModFolders.Contains(PathUtils.ForCompare(PathMods)) Then
+            Hint("正在补全联机模组，请稍后再更新 Mod！", HintType.Red)
+            Return
+        End If
         '更新前警告
         If Not Settings.Get(Of Boolean)("HintUpdateMod") OrElse ModList.Count >= 15 Then
             If MyMsgBox($"新版本 Mod 可能不兼容旧存档或者其他 Mod，这可能导致游戏崩溃，甚至永久损坏存档！{vbCrLf}如果你在游玩整合包，请千万不要自行更新 Mod！{vbCrLf}{vbCrLf}在更新前，请先备份存档，并检查 Mod 的更新日志。{vbCrLf}如果更新后出现问题，你也可以在回收站找回更新前的 Mod。", "Mod 更新警告", "我已了解风险，继续更新", "取消", IsWarn:=True) = 1 Then
@@ -610,7 +708,6 @@ Install:
             End Sub))
             '结束处理
             Dim Loader As New LoaderCombo(Of IEnumerable(Of LocalResourceFile))("Mod 更新：" & PageInstanceLeft.Instance.Name, InstallLoaders)
-            Dim PathMods As String = PageInstanceLeft.Instance.PathIndie & "mods\"
             Loader.OnStateChanged =
             Sub()
                 '结果提示

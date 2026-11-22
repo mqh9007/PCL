@@ -110,6 +110,10 @@ Public Class ResourceVersion
     ''' 作为该版本依赖项的项目 ID。
     ''' </summary>
     Public Dependencies As New List(Of String)
+    ''' <summary>
+    ''' 下载时使用的平台必需依赖，保留 API 库和指定的版本 ID。
+    ''' </summary>
+    Public ReadOnly RequiredDependencies As New List(Of (ProjectId As String, VersionId As String, FileName As String))
 
     '初始化
 
@@ -142,10 +146,11 @@ Public Class ResourceVersion
                 .DownloadUrls = .DownloadUrls.Distinct.ToList '最终去重
                 'Dependencies
                 If Data.ContainsKey("dependencies") Then
-                    .RawDependencies = Data("dependencies").
-                            Where(Function(d) d("relationType").ToObject(Of Integer) = 3 AndAlso '种类为依赖
-                                              d("modId").ToObject(Of Integer) <> 306612 AndAlso d("modId").ToObject(Of Integer) <> 634179). '排除 Fabric API 和 Quilt API
-                            Select(Function(d) d("modId").ToString).ToList
+                    For Each Dependency In Data("dependencies").Where(Function(d) d.Value(Of Integer)("relationType") = 3)
+                        .RequiredDependencies.Add((Dependency.Value(Of String)("modId"), Nothing, Nothing))
+                    Next
+                    .RawDependencies = .RequiredDependencies.Select(Function(d) d.ProjectId).
+                        Where(Function(Id) Not String.IsNullOrEmpty(Id) AndAlso Id <> "306612" AndAlso Id <> "634179").ToList() '详情页已有 Fabric API 和 Quilt API 的独立安装入口
                 End If
                 'GameVersions
                 Dim RawVersions As List(Of String) = Data("gameVersions").Select(Function(t) t.ToString.Trim.Lower).ToList
@@ -178,7 +183,7 @@ Public Class ResourceVersion
                 .ReleaseType = If(Data("version_type").ToString = "release", ReleaseTypes.Release, If(Data("version_type").ToString = "beta", ReleaseTypes.Beta, ReleaseTypes.Alpha))
                 .DownloadCount = Data("downloads")
                 If CType(Data("files"), JArray).Any() Then '可能为空
-                    Dim File As JToken = Data("files")(0)
+                    Dim File As JToken = If(Data("files").FirstOrDefault(Function(f) f.Value(Of Boolean)("primary")), Data("files")(0))
                     .FileName = File("filename")
                     .DownloadUrls = New List(Of String) From {File("url"), DlSourceModGet(File("url"))}.Distinct.ToList '同时添加了镜像源
                     .Size = File("size")
@@ -200,11 +205,12 @@ Public Class ResourceVersion
                 End If
                 'Dependencies
                 If Data.ContainsKey("dependencies") Then
-                    .RawDependencies = Data("dependencies").
-                            Where(Function(d) d("dependency_type") = "required" AndAlso '种类为依赖
-                                              d("project_id") <> "P7dR8mSH" AndAlso d("project_id") <> "qvIfYCYJ" AndAlso '排除 Fabric API 和 Quilt API
-                                              d("project_id").ToString.Length > 0). '有时候真的会空……
-                            Select(Function(d) d("project_id").ToString).ToList
+                    For Each Dependency In Data("dependencies").Where(Function(d) d.Value(Of String)("dependency_type") = "required")
+                        .RequiredDependencies.Add((Dependency.Value(Of String)("project_id"), Dependency.Value(Of String)("version_id"),
+                                                   Dependency.Value(Of String)("file_name")))
+                    Next
+                    .RawDependencies = .RequiredDependencies.Select(Function(d) d.ProjectId).
+                        Where(Function(Id) Not String.IsNullOrEmpty(Id) AndAlso Id <> "P7dR8mSH" AndAlso Id <> "qvIfYCYJ").ToList()
                 End If
                 'GameVersions
                 Dim RawVersions As List(Of String) = Data("game_versions").Select(Function(t) t.ToString.Trim.Lower).ToList
