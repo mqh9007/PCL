@@ -1,6 +1,8 @@
 name: Build
 on:
   push:
+    tags:
+      - 'pcl-v*'
     paths:
       - 'Plain Craft Launcher 2/**'
       - 'PCLCS/**'
@@ -11,6 +13,9 @@ on:
       - 'PCLCS/**'
       - '.github/workflows/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -29,10 +34,10 @@ jobs:
         submodules: true
 
     - name: Set Describe
-      shell: bash
+      shell: pwsh
       run: |
-          describe=`git describe --tags --always`
-          echo "describe=$describe" >> $GITHUB_ENV
+        $describe = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { git describe --tags --always }
+        "describe=$describe" >> $env:GITHUB_ENV
 
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v3
@@ -90,7 +95,32 @@ jobs:
         if (-not $baseSource.Contains($placeholder)) { throw 'Source placeholder not found for PCL_SERVER_LIST' }
         $baseSource = $baseSource.Replace($placeholder, 'Public Const LaunchServerListPreset As String = "' + $serverList.Replace('"', '""') + '"')
         Set-Content -LiteralPath $basePath -Value $baseSource -Encoding utf8 -NoNewline
-        
+
+    - name: Configure Launcher Update
+      if: github.event_name == 'push' && github.repository == 'mqh9007/PCL' && startsWith(github.ref, 'refs/tags/pcl-v') && matrix.configuration == 'Release'
+      shell: pwsh
+      env:
+        PCL_UPDATE_PUBLIC_KEY: ${{ vars.PCL_UPDATE_PUBLIC_KEY }}
+      run: |
+        $code = 0
+        if ($env:GITHUB_REF_NAME -cnotmatch '^pcl-v([1-9][0-9]*)$' -or -not [int]::TryParse($Matches[1], [ref]$code)) {
+          throw 'The release tag must be pcl-v followed by a positive 32-bit integer.'
+        }
+        $key = $env:PCL_UPDATE_PUBLIC_KEY
+        if ($key -cnotmatch '^[A-Za-z0-9+/]+={0,2}\.[A-Za-z0-9+/]+={0,2}$') {
+          throw 'Set the repository variable PCL_UPDATE_PUBLIC_KEY to the Base64 modulus and exponent separated by a dot.'
+        }
+        $updatePath = 'Plain Craft Launcher 2\Modules\ModLauncherUpdate.vb'
+        $source = Get-Content -LiteralPath $updatePath -Raw
+        $codePlaceholder = 'Private Const CurrentUpdateCode As Integer = 0'
+        $keyPlaceholder = 'Private Const UpdatePublicKey As String = ""'
+        if (-not $source.Contains($codePlaceholder) -or -not $source.Contains($keyPlaceholder)) {
+          throw 'Launcher update placeholders were not found.'
+        }
+        $source = $source.Replace($codePlaceholder, "Private Const CurrentUpdateCode As Integer = $code")
+        $source = $source.Replace($keyPlaceholder, ('Private Const UpdatePublicKey As String = "' + $key + '"'))
+        Set-Content -LiteralPath $updatePath -Value $source -Encoding utf8 -NoNewline
+
     - name: Restore NuGet Packages
       run: dotnet restore PCLCS\PCLCS.csproj
 
@@ -102,3 +132,92 @@ jobs:
       with:
         name: ${{ matrix.configuration }} ${{ env.describe }}
         path: Plain Craft Launcher 2\obj\${{ matrix.configuration }}\Plain Craft Launcher 2.exe
+        if-no-files-found: error
+
+  publish:
+    name: Publish launcher update
+    if: github.event_name == 'push' && github.repository == 'mqh9007/PCL' && startsWith(github.ref, 'refs/tags/pcl-v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: pcl-launcher-release
+      cancel-in-progress: false
+    steps:
+      - name: Download Release Build
+        uses: actions/download-artifact@v8
+        with:
+          name: Release ${{ github.ref_name }}
+          path: release
+
+      - name: Sign Update Manifest
+        shell: pwsh
+        env:
+          PCL_UPDATE_PUBLIC_KEY: ${{ vars.PCL_UPDATE_PUBLIC_KEY }}
+          PCL_UPDATE_SIGNING_KEY: ${{ secrets.PCL_UPDATE_SIGNING_KEY }}
+          PCL_UPDATE_CRITICAL: ${{ vars.PCL_UPDATE_CRITICAL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PCL_UPDATE_SIGNING_KEY)) {
+            throw 'Set the repository secret PCL_UPDATE_SIGNING_KEY.'
+          }
+          $exe = Rename-Item -LiteralPath 'release\Plain Craft Launcher 2.exe' -NewName 'PCL.exe' -PassThru
+          if ($exe.Length -le 0 -or $exe.Length -gt 100MB) { throw 'The update executable is outside the supported size range.' }
+          $releaseCode = [int]$env:GITHUB_REF_NAME.Substring('pcl-v'.Length)
+          $versionName = $exe.VersionInfo.FileVersion
+          if ([string]::IsNullOrWhiteSpace($versionName)) { throw 'The update executable has no file version.' }
+          $data = [ordered]@{
+            repository = $env:GITHUB_REPOSITORY
+            versionCode = $releaseCode
+            versionName = $versionName
+            sha256 = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash
+            size = $exe.Length
+            critical = ($env:PCL_UPDATE_CRITICAL -eq 'true')
+          }
+          $payload = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $data -Compress))
+          $signer = [Security.Cryptography.RSA]::Create()
+          try {
+            $keyBytes = [Convert]::FromBase64String($env:PCL_UPDATE_SIGNING_KEY)
+            $null = $signer.ImportPkcs8PrivateKey($keyBytes, [ref]$null)
+            $parameters = $signer.ExportParameters($false)
+            $publicKey = [Convert]::ToBase64String($parameters.Modulus) + '.' + [Convert]::ToBase64String($parameters.Exponent)
+            if ($signer.KeySize -lt 2048 -or $publicKey -cne $env:PCL_UPDATE_PUBLIC_KEY) { throw 'The signing key must be at least RSA 2048 and match PCL_UPDATE_PUBLIC_KEY.' }
+            $signature = $signer.SignData($payload, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+          } finally {
+            $signer.Dispose()
+          }
+          $manifest = @{
+            payload = [Convert]::ToBase64String($payload)
+            signature = [Convert]::ToBase64String($signature)
+          }
+          ConvertTo-Json -InputObject $manifest -Compress | Set-Content -LiteralPath 'release\update.json' -Encoding utf8NoBOM
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $code = [int]$tag.Substring('pcl-v'.Length)
+          $releasePages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pages = ($releasePages -join "`n") | ConvertFrom-Json -NoEnumerate
+          $releases = @($pages | ForEach-Object { $_ })
+          $existing = $releases | Where-Object { $_.tag_name -ceq $tag } | Select-Object -First 1
+          if ($existing -and -not $existing.draft) {
+            Write-Host 'This launcher release is already published.'
+            exit 0
+          }
+          foreach ($release in $releases) {
+            if (-not $release.draft -and $release.tag_name -cmatch '^pcl-v([1-9][0-9]*)$' -and [long]$Matches[1] -gt $code) {
+              throw 'A newer launcher update has already been published.'
+            }
+          }
+          if ($existing) {
+            gh release upload $tag release/PCL.exe release/update.json --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh release edit $tag --draft=false --prerelease=false --latest --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag release/PCL.exe release/update.json --verify-tag --latest --title "PCL build $code" --generate-notes --repo $env:GITHUB_REPOSITORY
+          }
+          exit $LASTEXITCODE

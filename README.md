@@ -30,3 +30,27 @@
 - 内存优化只回收当前用户有权限访问的进程工作集，不会关闭程序，不要求管理员权限；启动前自动优化和 `--memory` 命令行入口共用此实现。
 - 垃圾清理需要确认，只处理缓存目录 `Download` 中超过一天的 PCL 临时文件和 `TaskTemp` 中超过一天的任务缓存。运行中的启动/下载任务、链接目录、只读文件会被跳过，游戏和启动器设置不会被清理。
 - 可在启动器旁的 `PCL\hints.txt`、`PCL\caves.txt` 中自定义随机提示和趣闻（UTF-8，每行一条，空行忽略）；文件不存在、为空或不可读时使用内置内容。自定义主页的 `{hint}`、`{cave}` 及启动时的「你知道吗」提示同步生效。
+
+### 启动器更新
+
+- 发布源为 `mqh9007/PCL` 的公开 GitHub Releases。由发布标签构建的正式版会接入更新源。
+- 首次发布前，用 PowerShell 7 生成一次 RSA 签名密钥。以下命令将公钥写入仓库变量 `PCL_UPDATE_PUBLIC_KEY`，将私钥写入仓库 Secret `PCL_UPDATE_SIGNING_KEY`。后续发布继续使用这对密钥，并妥善保存私钥备份。
+
+  ```powershell
+  $rsa = [Security.Cryptography.RSA]::Create(3072)
+  try {
+      $public = $rsa.ExportParameters($false)
+      $publicKey = [Convert]::ToBase64String($public.Modulus) + '.' + [Convert]::ToBase64String($public.Exponent)
+      $privateKey = [Convert]::ToBase64String($rsa.ExportPkcs8PrivateKey())
+      $publicKey | gh variable set PCL_UPDATE_PUBLIC_KEY --repo mqh9007/PCL
+      if ($LASTEXITCODE -ne 0) { throw '写入更新公钥失败' }
+      $privateKey | gh secret set PCL_UPDATE_SIGNING_KEY --repo mqh9007/PCL
+      if ($LASTEXITCODE -ne 0) { throw '写入更新私钥失败' }
+  } finally {
+      $privateKey = $null
+      $rsa.Dispose()
+  }
+  ```
+
+- 将发布提交打上递增标签，如 `pcl-v1`、`pcl-v2`，并推送标签。Build 工作流会发布 `PCL.exe` 与签名清单 `update.json`。需要将本次更新标记为重大更新时，发布前把仓库变量 `PCL_UPDATE_CRITICAL` 设为 `true`，发布后清空。
+- 首次手动下载并运行 Release 中的 `PCL.exe`。后续版本可从「设置 → 启动器」或「更多 → 关于」检查。启动器在退出时安装已下载的更新，并在原程序旁保留 `.pcl-update.bak` 备份。

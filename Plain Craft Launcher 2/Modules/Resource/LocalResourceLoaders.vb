@@ -22,26 +22,8 @@ Public Module LocalResourceLoaders
             End If
 
             '获取 Mod 文件夹下的可用文件列表
-            Dim ModFileList As New List(Of String)
-            If DirectoryUtils.Exists(Loader.Input) Then
-                For Each File In DirectoryUtils.EnumerateFiles(Loader.Input, True)
-                    If Not PathUtils.IsSame(PathUtils.RemoveLastPart(File), Loader.Input) Then
-                        '仅当 Forge 1.13- 且文件夹名与版本号相同时，才加载该子文件夹下的 Mod
-                        If Not (PageInstanceLeft.Instance IsNot Nothing AndAlso PageInstanceLeft.Instance.Version.ModLoaders.HasFlagF(ModLoaders.Forge) AndAlso
-                                PageInstanceLeft.Instance.Version.Vanilla.Major < 13 AndAlso
-                                PathUtils.GetLastPart(PathUtils.RemoveLastPart(File)) = $"1.{PageInstanceLeft.Instance.Version.Vanilla.Major}.{PageInstanceLeft.Instance.Version.Vanilla.Build}") Then
-                            Continue For
-                        End If
-                    End If
-                    Static IsModFile As Func(Of String, Boolean) =
-                    Function(FullName As String)
-                        If FullName Is Nothing Then Return False
-                        If {"disabled", "old"}.Contains(PathUtils.GetExtension(FullName)) Then FullName = PathUtils.GetFileNameWithoutExtension(FullName)
-                        Return {"jar", "zip", "litemod"}.Contains(PathUtils.GetExtension(FullName))
-                    End Function
-                    If IsModFile(File) Then ModFileList.Add(File)
-                Next
-            End If
+            Dim ModList = GetLocalModFiles(Loader.Input, PageInstanceLeft.Instance?.Version, Function() Loader.IsCanceled)
+            If Loader.IsCanceled Then Return
 
             '获取本地文件缓存
             Dim CachePath As String = PathTemp & "Cache\LocalMod.json"
@@ -61,27 +43,7 @@ Public Module LocalResourceLoaders
             End Try
             Cache("version") = Versions.LocalModCacheVersion
 
-            '加载 Mod 列表
-            Dim ModList As New List(Of LocalResourceFile)
-            For Each ModFile In ModFileList
-                If Loader.IsCanceled Then Return
-                Dim ModEntry As New LocalResourceFile(ModFile)
-                Dim DumpMod As LocalResourceFile = ModList.FirstOrDefault(Function(m) m.EnabledName = ModEntry.EnabledName) '存在两个文件，名称相同，但一个启用一个禁用
-                If DumpMod IsNot Nothing Then
-                    Dim DisabledMod As LocalResourceFile = If(DumpMod.IsEnabled, ModEntry, DumpMod)
-                    Logger.Warn($"重复的 Mod 文件：{DumpMod.File.Name} 与 {ModEntry.File.Name}，已忽略 {DisabledMod.File.Name}")
-                    If DisabledMod Is ModEntry Then
-                        Continue For
-                    Else
-                        ModList.Remove(DisabledMod)
-                    End If
-                End If
-                ModList.Add(ModEntry)
-            Next
             Logger.Info($"共发现 {ModList.Count} 个 Mod")
-
-            '排序
-            ModList = ModList.OrderBy(Function(m) m.File.Name).ToList
 
             '回设
             If Loader.IsCanceled Then Return
@@ -96,6 +58,39 @@ Public Module LocalResourceLoaders
             Throw
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 按 Mod 管理的规则扫描指定版本的 Mod 文件夹。
+    ''' </summary>
+    Public Function GetLocalModFiles(Folder As String, Version As McVersion, IsCanceled As Func(Of Boolean),
+                                     Optional KeepDuplicates As Boolean = False) As List(Of LocalResourceFile)
+        Dim ModList As New List(Of LocalResourceFile)
+        If Not DirectoryUtils.Exists(Folder) Then Return ModList
+        Dim LegacyForgeFolderName As String = Nothing
+        If Version IsNot Nothing AndAlso Version.ModLoaders.HasFlagF(ModLoaders.Forge) AndAlso Version.Vanilla.Major < 13 Then
+            LegacyForgeFolderName = $"1.{Version.Vanilla.Major}.{Version.Vanilla.Build}"
+        End If
+        For Each File In DirectoryUtils.EnumerateFiles(Folder, True)
+            If IsCanceled() Then Return ModList
+            Dim ParentFolder = PathUtils.RemoveLastPart(File)
+            If Not PathUtils.IsSame(ParentFolder, Folder) AndAlso
+               (LegacyForgeFolderName Is Nothing OrElse PathUtils.GetLastPart(ParentFolder) <> LegacyForgeFolderName) Then Continue For
+            Dim FileName = If({"disabled", "old"}.Contains(PathUtils.GetExtension(File)), PathUtils.GetFileNameWithoutExtension(File), File)
+            If Not {"jar", "zip", "litemod"}.Contains(PathUtils.GetExtension(FileName)) Then Continue For
+            Dim Entry As New LocalResourceFile(File)
+            If Not KeepDuplicates Then
+                Dim Existing = ModList.FirstOrDefault(Function(m) m.EnabledName = Entry.EnabledName)
+                If Existing IsNot Nothing Then
+                    Dim Ignored = If(Existing.IsEnabled, Entry, Existing)
+                    Logger.Warn($"重复的 Mod 文件：{Existing.File.Name} 与 {Entry.File.Name}，已忽略 {Ignored.File.Name}")
+                    If Ignored Is Entry Then Continue For
+                    ModList.Remove(Ignored)
+                End If
+            End If
+            ModList.Add(Entry)
+        Next
+        Return ModList.OrderBy(Function(m) m.File.Name).ToList()
+    End Function
 
     '联网加载 Mod 详情
     Public LocalResourceOnlineLoader As New LoaderTask(Of (ModList As List(Of LocalResourceFile), Cache As JObject, Target As McVersion), Integer)("LocalResourceOnlineLoader", AddressOf LocalResourceOnlineLoad)

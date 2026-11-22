@@ -43,6 +43,10 @@ Public Class ResourceVersion
     ''' 支持的游戏版本列表。类型包括："26.1.5"，"26.1"，"26.1 预览版"，"1.18.5"，"1.18"，"1.18 预览版"，"21w15a"，"未知版本"。
     ''' </summary>
     Public GameVersions As List(Of String)
+    ''' <summary>
+    ''' 平台返回的原始版本标签，用于区分显示为同一名称的预览版。
+    ''' </summary>
+    Public RawGameVersions As List(Of String)
 
     ''' <summary>
     ''' 发布状态。
@@ -145,6 +149,7 @@ Public Class ResourceVersion
                 End If
                 'GameVersions
                 Dim RawVersions As List(Of String) = Data("gameVersions").Select(Function(t) t.ToString.Trim.Lower).ToList
+                .RawGameVersions = RawVersions
                 .GameVersions = RawVersions.
                         Where(Function(v) McVersion.IsStandardFormat(v)).
                         Select(Function(v) v.Replace("-snapshot", " 预览版")).
@@ -203,6 +208,7 @@ Public Class ResourceVersion
                 End If
                 'GameVersions
                 Dim RawVersions As List(Of String) = Data("game_versions").Select(Function(t) t.ToString.Trim.Lower).ToList
+                .RawGameVersions = RawVersions
                 .GameVersions = RawVersions.Where(Function(v) v.Contains(".")).
                                                Select(Function(v) If(v.Contains("-"), v.BeforeFirst("-") & " 预览版", If(v.StartsWithF("b1."), "远古版本", v))).
                                                Distinct.ToList

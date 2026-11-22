@@ -167,6 +167,7 @@ EndHint:
         ''' 登录模式：登录步骤 1 中返回的 JSON。
         ''' </summary>
         Public Content As Object
+        Public LoadMultiSelections As Func(Of CancellationToken, Task(Of IEnumerable(Of MyListItem)))
         ''' <summary>
         ''' 输入模式：输入验证规则。
         ''' </summary>
@@ -321,6 +322,26 @@ EndHint:
         End Try
         Logger.Info($"选择弹框返回：{If(Converter.Result, "null")}")
         Return Converter.Result
+    End Function
+
+    ''' <summary>
+    ''' 显示可多选的列表，返回勾选项。取消时返回空列表。
+    ''' </summary>
+    Public Function MyMsgBoxMultiSelect(LoadSelections As Func(Of CancellationToken, Task(Of IEnumerable(Of MyListItem))),
+                                        Title As String, Caption As String, Button1 As String) As IEnumerable(Of MyListItem)
+        Dim Converter As New MyMsgBoxConverter With {
+            .Type = MyMsgBoxType.Select, .Title = Title, .Text = Caption, .Button1 = Button1, .Button2 = "取消",
+            .LoadMultiSelections = LoadSelections}
+        WaitingMyMsgBox.Enqueue(Converter)
+        Try
+            FrmMain.DragStop()
+            MyMsgBoxTick()
+            ComponentDispatcher.PushModal()
+            Dispatcher.PushFrame(Converter.WaitFrame)
+        Finally
+            ComponentDispatcher.PopModal()
+        End Try
+        Return If(TryCast(Converter.Result, IEnumerable(Of MyListItem)), Enumerable.Empty(Of MyListItem)())
     End Function
 
     ''' <summary>

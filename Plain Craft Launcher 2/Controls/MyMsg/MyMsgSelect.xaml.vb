@@ -2,6 +2,7 @@ Public Class MyMsgSelect
 
     Private ReadOnly MyConverter As MyMsgBoxConverter
     Private ReadOnly Uuid As Integer = GetUuid()
+    Private LoadCancellation As CancellationTokenSource
 
     Public Sub New(Converter As MyMsgBoxConverter)
         Try
@@ -21,6 +22,10 @@ Public Class MyMsgSelect
             ShapeLine.StrokeThickness = GetWPFSize(1)
             '添加选择控件
             Btn1.IsEnabled = False
+            If Converter.LoadMultiSelections IsNot Nothing Then
+                MaxWidth = 560
+                Return
+            End If
             For Each Content In Converter.Content
                 Content = MyVirtualizingElement.TryInit(Content)
                 Dim Selection As IMyRadio = Content
@@ -59,10 +64,46 @@ Public Class MyMsgSelect
             Logger.Error(ex, "选择弹窗加载失败", LogBehavior.Toast)
         End Try
     End Sub
+
+    Private Async Sub LoadMultiSelections() Handles Me.Loaded
+        If MyConverter.LoadMultiSelections Is Nothing Then Return
+        LoadCancellation = New CancellationTokenSource()
+        Dim Loading As New MyLoading With {.Text = "正在检查模组", .Height = 48}
+        PanSelection.Children.Add(Loading)
+        Try
+            Dim Items = Await MyConverter.LoadMultiSelections(LoadCancellation.Token)
+            If MyConverter.IsExited Then Return
+            PanSelection.Children.Clear()
+            PanSelection.Children.Add(New TextBlock With {
+                .Text = MyConverter.Text, .TextWrapping = TextWrapping.Wrap, .Margin = New Thickness(4, 0, 4, 8)})
+            For Each Item In Items
+                If Item.IsEnabled Then
+                    Item.Type = MyListItem.CheckType.CheckBox
+                    AddHandler Item.Changed, AddressOf UpdateMultiSelection
+                End If
+                PanSelection.Children.Add(Item)
+            Next
+            UpdateMultiSelection()
+        Catch ex As OperationCanceledException When LoadCancellation.IsCancellationRequested
+        Catch ex As Exception
+            Logger.Warn(ex, "加载弹窗列表失败")
+            If MyConverter.IsExited Then Return
+            PanSelection.Children.Clear()
+            PanSelection.Children.Add(New MyHint With {.Text = ex.GetDisplay(False), .Theme = MyHint.Themes.Yellow})
+        Finally
+            LoadCancellation.Dispose()
+            LoadCancellation = Nothing
+        End Try
+    End Sub
+
+    Private Sub UpdateMultiSelection()
+        Btn1.IsEnabled = PanSelection.Children.OfType(Of MyListItem)().Any(Function(Item) Item.IsEnabled AndAlso Item.Checked)
+    End Sub
+
     Private Sub Close()
+        LoadCancellation?.Cancel()
         '结束线程阻塞
         MyConverter.WaitFrame.Continue = False
-        Interop.ComponentDispatcher.PopModal()
         '动画
         AniStart({
             AaCode(
@@ -79,9 +120,16 @@ Public Class MyMsgSelect
     End Sub
 
     Public Sub Btn1_Click() Handles Btn1.Click
-        If MyConverter.IsExited OrElse SelectedIndex = -1 Then Return
+        If MyConverter.IsExited Then Return
+        If MyConverter.LoadMultiSelections IsNot Nothing Then
+            If Not Btn1.IsEnabled Then Return
+            MyConverter.Result = PanSelection.Children.OfType(Of MyListItem)().
+                Where(Function(Item) Item.IsEnabled AndAlso Item.Checked).ToList()
+        Else
+            If SelectedIndex = -1 Then Return
+            MyConverter.Result = SelectedIndex
+        End If
         MyConverter.IsExited = True
-        MyConverter.Result = SelectedIndex
         Close()
     End Sub
     Public Sub Btn2_Click() Handles Btn2.Click

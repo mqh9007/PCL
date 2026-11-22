@@ -56,6 +56,8 @@ Public Class ResourceSearcher
         ''' 允许的来源。
         ''' </summary>
         Public Sources As ResourcePlatforms = ResourcePlatforms.Any
+        '需要分别检查两个平台的版本文件时，保留同一项目的两个来源。
+        Public KeepPlatformVariants As Boolean
         Public Sub New(Type As ResourceTypes, Storage As SearchResult, TargetResultCount As Integer)
             Me.Type = Type
             Me.Storage = Storage
@@ -117,7 +119,8 @@ Public Class ResourceSearcher
             Return request IsNot Nothing AndAlso
                 Type = request.Type AndAlso TargetResultCount = request.TargetResultCount AndAlso
                 Tag = request.Tag AndAlso ModLoaders = request.ModLoaders AndAlso Sources = request.Sources AndAlso
-                GameVersion = request.GameVersion AndAlso SearchText = request.SearchText
+                GameVersion = request.GameVersion AndAlso SearchText = request.SearchText AndAlso
+                KeepPlatformVariants = request.KeepPlatformVariants
         End Function
         Public Shared Operator =(left As SearchRequest, right As SearchRequest) As Boolean
             Return EqualityComparer(Of SearchRequest).Default.Equals(left, right)
@@ -126,7 +129,7 @@ Public Class ResourceSearcher
             Return Not left = right
         End Operator
         Public Overrides Function GetHashCode() As Integer
-            Return (Type, Tag, ModLoaders, GameVersion, SearchText, Sources).GetHashCode()
+            Return (Type, Tag, ModLoaders, GameVersion, SearchText, Sources, KeepPlatformVariants).GetHashCode()
         End Function
 
     End Class
@@ -455,10 +458,12 @@ NextPage:
         '将 CurseForge 排在 Modrinth 的前面，避免加载结束顺序不同导致排名不同
         RawResults = RawResults.Where(Function(x) x.Platform = ResourcePlatforms.CurseForge).Concat(RawResults.Where(Function(x) x.Platform <> ResourcePlatforms.CurseForge)).ToList
         '去重
-        RawResults = RawResults.Distinct(Function(a, b) a.IsLike(b)).ToList
+        Dim SameProject As Func(Of ResourceProject, ResourceProject, Boolean) =
+            Function(a, b) If(Request.KeepPlatformVariants, a.Id = b.Id AndAlso a.Platform = b.Platform, a.IsLike(b))
+        RawResults = RawResults.Distinct(SameProject).ToList
         '已有内容去重
-        RawResults = RawResults.Where(Function(r) Not RealResults.Any(Function(b) r.IsLike(b)) AndAlso
-                                                  Not Storage.Results.Any(Function(b) r.IsLike(b))).ToList
+        RawResults = RawResults.Where(Function(r) Not RealResults.Any(Function(b) SameProject(r, b)) AndAlso
+                                                  Not Storage.Results.Any(Function(b) SameProject(r, b))).ToList
         '加入列表
         RealResults.AddRange(RawResults)
         Logger.Info($"去重、筛选后累计新增结果 {RealResults.Count} 个（目前已有结果 {Storage.Results.Count} 个）")
