@@ -24,6 +24,10 @@ Public Class PageSetupSystem
 
     End Sub
     Public Sub Reload()
+        Dim ModList = Settings.Get(Of String)("LinkModList")
+        If ModList.Contains(vbCr) OrElse ModList.Contains(vbLf) Then
+            Settings.Set("LinkModList", String.Join(",", LinkModCompletion.ParseNames(ModList)))
+        End If
         SettingService.RefreshSettings(Me)
     End Sub
     Public Sub Reset()

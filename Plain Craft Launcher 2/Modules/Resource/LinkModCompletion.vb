@@ -1,5 +1,12 @@
 Public Module LinkModCompletion
 
+    Public Function ParseNames(Value As String) As List(Of String)
+        '同时兼容旧版保存的换行列表。
+        Return Value.Split({","c, ChrW(13), ChrW(10)}, StringSplitOptions.RemoveEmptyEntries).
+            Select(Function(Name) Name.Trim()).Where(Function(Name) Name.Length > 0).
+            Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+    End Function
+
     Public Class Entry
         Public ReadOnly Name As String
         Public Project As ResourceProject
@@ -61,7 +68,7 @@ Public Module LinkModCompletion
         Next
         If Projects.Count = 0 Then
             If Matches.Count > 0 Then
-                Item.Status = "找到多个同名模组，请在联机设置中填写项目短名"
+                Item.Status = "找到多个同名模组，请在模组列表中填写项目短名"
             Else
                 Item.Status = If(Storage.ErrorMessage Is Nothing, "未找到同名社区资源", "部分社区资源来源不可用，可关闭后重试")
             End If

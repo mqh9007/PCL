@@ -9,6 +9,7 @@ Public Module ModBase
     Public Const VersionBaseName As String = "2.99.0.1" '显示用版本名
     Public Const CommitHash As String = "" 'Commit Hash，由 GitHub Workflow 自动替换
     Public Const LaunchServerListPreset As String = ""
+    Public Const LinkModListPresetBase64 As String = ""
 #If RELEASE Then
     Public Const VersionCode As Integer = 415 '正式版
 #Else

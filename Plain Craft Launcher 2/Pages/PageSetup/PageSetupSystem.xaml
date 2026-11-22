@@ -46,6 +46,14 @@
                     </Grid>
                 </StackPanel>
             </local:MyCard>
+            <local:MyCard Margin="0,0,0,15" Title="联机模组">
+                <StackPanel Margin="25,40,25,20">
+                    <TextBlock Text="填写社区资源中的模组原名或项目短名，用英文逗号（,）分隔。" TextWrapping="Wrap" Margin="0,0,0,9" />
+                    <local:MyTextBox local:SettingService.Key="LinkModList" HintText="模组原名,项目短名"
+                                     Height="80" MaxLength="4000" TextWrapping="Wrap"
+                                     VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Padding="0,5" />
+                </StackPanel>
+            </local:MyCard>
             <local:MyCard Margin="0,0,0,15" Title="社区资源">
                 <StackPanel Margin="25,37,25,12">
                     <Grid>

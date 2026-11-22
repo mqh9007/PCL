@@ -227,11 +227,9 @@ Public Class PageInstanceOverall
                 Hint("该版本的文件正在被修改，请稍后再补全联机模组！", HintType.Red)
                 Return
             End If
-            Dim Names = Settings.Get(Of String)("LinkModList").Split({ChrW(13), ChrW(10)}, StringSplitOptions.RemoveEmptyEntries).
-                Select(Function(Name) Name.Trim()).Where(Function(Name) Name.Length > 0).
-                Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            Dim Names = LinkModCompletion.ParseNames(Settings.Get(Of String)("LinkModList"))
             If Names.Count = 0 Then
-                MyMsgBox("请先在「设置 → 联机 → 联机模组」中填写要补全的模组。", "补全联机模组")
+                MyMsgBox("请先在「设置 → 其他 → 联机模组」中填写要补全的模组。", "补全联机模组")
                 Return
             End If
 

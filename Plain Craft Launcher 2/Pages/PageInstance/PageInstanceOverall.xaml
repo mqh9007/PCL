@@ -83,7 +83,7 @@
                     </Grid>
                     <local:MyButton x:Name="BtnManageLinkMods" Text="补全联机模组" MinWidth="140" Padding="13,0" Height="35"
                                     Margin="0,2,0,7" HorizontalAlignment="Left"
-                                    ToolTip="检查「设置 → 联机」中的模组列表，并选择要为当前版本补全的模组。" />
+                                    ToolTip="检查「设置 → 其他 → 联机模组」中的列表，并选择要为当前版本补全的模组。" />
                 </StackPanel>
             </local:MyCard>
         </StackPanel>
